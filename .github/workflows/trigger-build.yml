@@ -1,0 +1,53 @@
+name: Trigger Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  trigger-builder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+
+      - name: Get commit information
+        id: commit-info
+        run: |
+          echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "ref=${{ github.ref }}" >> $GITHUB_OUTPUT
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo "author=${{ github.actor }}" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      - name: Trigger build in perekine-builder
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.BUILD_TRIGGER_TOKEN }}
+          repository: ${{ github.repository_owner }}/perekine-builder
+          event-type: service-change
+          client-payload: |
+            {
+              "service_repo": "${{ github.repository }}",
+              "commit_sha": "${{ steps.commit-info.outputs.sha }}",
+              "branch": "${{ steps.commit-info.outputs.branch }}",
+              "ref": "${{ github.ref }}",
+              "author": "${{ github.actor }}",
+              "commit_message": "${{ steps.commit-info.outputs.message }}",
+              "triggered_at": "${{ github.event.head_commit.timestamp }}"
+            }
+
+      - name: Report trigger status
+        run: |
+          echo "✅ Build triggered successfully"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${GITHUB_REF#refs/heads/}"
+
